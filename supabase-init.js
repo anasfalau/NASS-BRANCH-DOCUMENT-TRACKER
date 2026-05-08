@@ -61,6 +61,13 @@ var rowIds = [];
     return;
   }
 
+  await loadScript('config.js');
+  await loadScript('utils.js');
+  await loadScript('tracker.js');
+  await loadScript('drive.js');
+  await loadScript('dashboard.js');
+  await loadScript('admin.js');
+  await loadScript('inbox.js');
   await loadScript('app.js');
   if (typeof _mlStartPolling === 'function') _mlStartPolling();
   // chat.js is lazy-loaded on first FAB click — see _nassAiLaunch in index.html
@@ -643,13 +650,10 @@ function nassLogout() {
 function show(id) { const el = document.getElementById(id); if (el) el.style.display = 'flex'; }
 function hide(id) { const el = document.getElementById(id); if (el) el.style.display = 'none'; }
 
-// Version string matched to the SW cache name — lets the service worker serve
-// app.js from cache instead of bypassing it with a unique timestamp every load.
-const _APP_VER = 'v17';
 function loadScript(src) {
   return new Promise((resolve, reject) => {
     const s   = document.createElement('script');
-    s.src     = src + '?v=' + _APP_VER;
+    s.src     = src;
     s.onload  = resolve;
     s.onerror = () => reject(new Error('Failed to load ' + src));
     document.body.appendChild(s);
