@@ -1219,6 +1219,24 @@ body.ms-docked .al-td-rec{max-width:180px}
 .ms-bbl-ts{font-size:10px;color:var(--fg-faint);padding:0 5px}
 .ms-ts-pending{color:var(--fg-faint);font-style:italic}
 .ms-optimistic{opacity:0.72}
+.ms-edited{margin-left:4px;color:var(--fg-faint);font-style:italic}
+
+/* Edit button + inline editor */
+.ms-bbl-row{display:flex;align-items:center;gap:6px}
+.ms-mine .ms-bbl-row{flex-direction:row-reverse}
+.ms-msg-edit{background:transparent;border:none;color:var(--fg-subtle);padding:4px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.15s,background 0.15s,color 0.15s;flex-shrink:0}
+.ms-msg:hover .ms-msg-edit,.ms-msg-edit:focus{opacity:1}
+.ms-msg-edit:hover{background:var(--bg-subtle);color:var(--nass-navy-600)}
+.ms-bbl-edit{display:flex;flex-direction:column;gap:6px;padding:8px 10px;background:var(--bg-card);border:1.5px solid var(--nass-navy-500);border-radius:12px;box-shadow:0 1px 6px rgba(0,0,0,0.08);max-width:340px}
+.ms-mine .ms-bbl-edit{background:var(--bg-card);color:var(--fg-ink)}
+.ms-edit-ta{width:100%;min-width:200px;resize:vertical;min-height:48px;max-height:160px;font-family:var(--font-sans);font-size:13px;line-height:1.5;padding:6px 8px;border:1px solid var(--border-soft);border-radius:8px;background:var(--bg-subtle);color:var(--fg-ink);box-sizing:border-box}
+.ms-edit-ta:focus{outline:none;border-color:var(--nass-navy-500);box-shadow:0 0 0 2px rgba(0,80,158,0.15)}
+.ms-edit-actions{display:flex;gap:6px;justify-content:flex-end}
+.ms-edit-cancel,.ms-edit-save{font-size:11.5px;font-weight:600;padding:5px 12px;border-radius:6px;cursor:pointer;border:1px solid var(--border-default);background:var(--bg-card);color:var(--fg-ink)}
+.ms-edit-cancel:hover{background:var(--bg-subtle)}
+.ms-edit-save{background:var(--nass-navy-600);border-color:var(--nass-navy-600);color:#fff}
+.ms-edit-save:hover{background:var(--nass-navy-700)}
+.ms-edit-err{font-size:11px;color:var(--signal-danger);padding:0 2px}
 .ms-typing-bar{min-height:16px;font-size:10.5px;color:var(--fg-muted);font-style:italic;padding:2px 14px 0;flex-shrink:0}
 .ms-mention{color:var(--nass-navy-600);font-weight:700;background:rgba(0,51,102,0.08);border-radius:3px;padding:0 2px}
 .ms-mine .ms-mention{color:#ffd966;background:rgba(255,217,102,0.15)}
@@ -1293,6 +1311,15 @@ body.dark .ms-bbl{background:#182434!important;border-color:#3a5070!important;co
 body.dark .ms-mine .ms-bbl{background:#1a3560!important;border-color:transparent!important;color:#f0f4ff!important}
 body.dark .ms-ai .ms-bbl{background:#2a1050!important;border-color:#6a3aa0!important;color:#d0b0ff!important}
 body.dark .ms-bbl-sender{color:#526a88!important}
+body.dark .ms-edited{color:#7a8fac!important}
+body.dark .ms-msg-edit{color:#8aabcc!important}
+body.dark .ms-msg-edit:hover{background:#22344a!important;color:#cfe0ff!important}
+body.dark .ms-bbl-edit{background:#182434!important;border-color:#4a78bc!important}
+body.dark .ms-edit-ta{background:#0f1a28!important;color:#f0f4ff!important;border-color:#3a5070!important}
+body.dark .ms-edit-cancel{background:#182434!important;color:#f0f4ff!important;border-color:#3a5070!important}
+body.dark .ms-edit-cancel:hover{background:#22344a!important}
+body.dark .ms-edit-save{background:#1a3560!important;border-color:#1a3560!important;color:#f0f4ff!important}
+body.dark .ms-edit-save:hover{background:#244478!important}
 body.dark .ms-mention{color:#82bcff!important;background:rgba(74,158,255,0.12)!important}
 body.dark .ms-mine .ms-mention{color:#ffd966!important;background:rgba(255,217,102,0.12)!important}
 body.dark .ms-inp-row{background:#0f1a28!important;border-color:#2a4060!important}

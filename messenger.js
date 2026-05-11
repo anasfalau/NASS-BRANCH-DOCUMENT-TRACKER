@@ -558,20 +558,40 @@ function _renderMsgs(){
 // ── Single message bubble ─────────────────────────────────────────
 function _bubble(m){
   var isMe=m.user_id===_myId,isAi=!!m.is_ai_response;
+  var canEdit=isMe&&!isAi&&m.id;
   var div=document.createElement('div');
   div.className='ms-msg'+(isMe?' ms-mine':'')+(isAi?' ms-ai':'');
   div.dataset.mid=m.id;
   var av=isAi?'&#129302;':(isMe?_esc(_myEmail[0].toUpperCase()):_esc((m.user_email||'?')[0].toUpperCase()));
   var sender=_shortName(m.user_email,isAi);
   var txt=_esc(m.content).replace(/@AI/gi,'<span class="ms-mention">@AI</span>');
+  var editedSuffix=m.edited_at?' <span class="ms-edited" title="Edited '+_fmt(m.edited_at)+'">(edited)</span>':'';
+  var editBtn=canEdit
+    ? '<button class="ms-msg-edit" title="Edit message" aria-label="Edit message" onclick="window._msEditMsg(\''+_esc(m.id)+'\')">'+
+        '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">'+
+          '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/>'+
+        '</svg></button>'
+    : '';
   div.innerHTML=
     '<div class="ms-bbl-av">'+av+'</div>'+
     '<div class="ms-bbl-body">'+
       (isMe?'':'<div class="ms-bbl-sender">'+_esc(sender)+'</div>')+
-      '<div class="ms-bbl">'+txt+'</div>'+
-      '<div class="ms-bbl-ts">'+_fmt(m.created_at)+'</div>'+
+      '<div class="ms-bbl-row">'+
+        editBtn+
+        '<div class="ms-bbl">'+txt+'</div>'+
+      '</div>'+
+      '<div class="ms-bbl-ts">'+_fmt(m.created_at)+editedSuffix+'</div>'+
     '</div>';
   return div;
+}
+
+// ── Re-render a single message bubble in place ────────────────────
+function _refreshBubble(m){
+  var el=document.getElementById('ms-msgs');if(!el)return;
+  var old=el.querySelector('.ms-msg[data-mid="'+m.id+'"]');
+  if(!old)return;
+  var fresh=_bubble(m);
+  old.parentNode.replaceChild(fresh,old);
 }
 
 // ── Append a single live message ──────────────────────────────────
@@ -636,6 +656,93 @@ function _updateTypingBar(){
   var bar=document.getElementById('ms-typing-bar');
   if(bar)bar.textContent=typers.length?typers.join(', ')+(typers.length===1?' is':' are')+' typing…':'';
 }
+
+// ── Edit message (author-only, non-AI) ────────────────────────────
+var _editingMid=null;
+function _findMsg(mid){return _msgs.find(function(x){return String(x.id)===String(mid);});}
+
+function _startEdit(mid){
+  var m=_findMsg(mid);
+  if(!m||m.user_id!==_myId||m.is_ai_response)return;
+  // If another edit is open, cancel it first
+  if(_editingMid&&_editingMid!==mid){
+    var prev=_findMsg(_editingMid);if(prev)_refreshBubble(prev);
+  }
+  _editingMid=mid;
+  var el=document.getElementById('ms-msgs');if(!el)return;
+  var node=el.querySelector('.ms-msg[data-mid="'+mid+'"]');if(!node)return;
+  var row=node.querySelector('.ms-bbl-row');
+  var bbl=node.querySelector('.ms-bbl');
+  if(!row||!bbl)return;
+  var current=m.content||'';
+  bbl.outerHTML=
+    '<div class="ms-bbl ms-bbl-edit">'+
+      '<textarea class="ms-edit-ta" id="ms-edit-ta-'+_esc(mid)+'" maxlength="2000" rows="2">'+_esc(current)+'</textarea>'+
+      '<div class="ms-edit-actions">'+
+        '<button class="ms-edit-cancel" onclick="window._msCancelEdit(\''+_esc(mid)+'\')">Cancel</button>'+
+        '<button class="ms-edit-save" onclick="window._msSaveEdit(\''+_esc(mid)+'\')">Save</button>'+
+      '</div>'+
+    '</div>';
+  var ta=document.getElementById('ms-edit-ta-'+mid);
+  if(ta){
+    ta.focus();
+    ta.setSelectionRange(ta.value.length,ta.value.length);
+    ta.addEventListener('keydown',function(e){
+      if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();_saveEdit(mid);}
+      else if(e.key==='Escape'){e.preventDefault();_cancelEdit(mid);}
+    });
+  }
+}
+
+function _cancelEdit(mid){
+  var m=_findMsg(mid);
+  _editingMid=null;
+  if(m)_refreshBubble(m);
+}
+
+async function _saveEdit(mid){
+  var m=_findMsg(mid);if(!m)return;
+  var ta=document.getElementById('ms-edit-ta-'+mid);if(!ta)return;
+  var next=(ta.value||'').trim();
+  if(!next){return;}
+  if(next.length>2000){next=next.slice(0,2000);}
+  if(next===m.content){_cancelEdit(mid);return;}
+  ta.disabled=true;
+  try{
+    var upd=await _sb.from('nass_messages')
+      .update({content:next})
+      .eq('id',mid)
+      .select('id,content,edited_at')
+      .single();
+    if(upd.error)throw upd.error;
+    m.content=upd.data.content;
+    m.edited_at=upd.data.edited_at;
+    _skipIds.add('upd:'+mid);
+    _editingMid=null;
+    _refreshBubble(m);
+    // Refresh conv preview if this was the last message in the conv
+    var conv=_convs.find(function(c){return c.id===m.conversation_id;});
+    if(conv){
+      var lastInConv=null;
+      _msgs.forEach(function(x){if(!lastInConv||new Date(x.created_at)>new Date(lastInConv.created_at))lastInConv=x;});
+      if(lastInConv&&lastInConv.id===m.id){
+        conv.lastMsg=_lastPreview(m);
+        _renderConvList(document.getElementById('ms-sb-search')?document.getElementById('ms-sb-search').value:'');
+      }
+    }
+  }catch(e){
+    console.error('[MS] edit',e);
+    if(ta){ta.disabled=false;ta.focus();}
+    var err=document.createElement('div');
+    err.className='ms-edit-err';
+    err.textContent='Could not save edit. Try again.';
+    if(ta&&ta.parentNode&&!ta.parentNode.querySelector('.ms-edit-err'))ta.parentNode.appendChild(err);
+  }
+}
+
+window._msEditMsg=_startEdit;
+window._msCancelEdit=_cancelEdit;
+window._msSaveEdit=_saveEdit;
 
 // ── Send message ──────────────────────────────────────────────────
 async function _send(){
@@ -742,6 +849,29 @@ function _subscribe(){
         _convListRafId=null;
         _renderConvList(document.getElementById('ms-sb-search')?document.getElementById('ms-sb-search').value:'');
       });
+    })
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'nass_messages'},function(p){
+      var m=p.new;
+      if(_skipIds.has('upd:'+m.id)){_skipIds.delete('upd:'+m.id);return;}
+      // Update local cache if we have this message loaded
+      if(m.conversation_id===_activeId){
+        var idx=_msgs.findIndex(function(x){return String(x.id)===String(m.id);});
+        if(idx!==-1){
+          _msgs[idx]=Object.assign({},_msgs[idx],m);
+          // Don't clobber an open edit on the same message
+          if(_editingMid!==m.id)_refreshBubble(_msgs[idx]);
+        }
+      }
+      // Refresh conv preview if this is the most recent message
+      var conv=_convs.find(function(c){return c.id===m.conversation_id;});
+      if(conv&&conv.last_msg_at&&new Date(m.created_at).getTime()===new Date(conv.last_msg_at).getTime()){
+        conv.lastMsg=_lastPreview(m);
+        if(_convListRafId)cancelAnimationFrame(_convListRafId);
+        _convListRafId=requestAnimationFrame(function(){
+          _convListRafId=null;
+          _renderConvList(document.getElementById('ms-sb-search')?document.getElementById('ms-sb-search').value:'');
+        });
+      }
     })
     .on('postgres_changes',{event:'INSERT',schema:'public',table:'nass_conversations'},function(){
       setTimeout(_loadConvs,400);
