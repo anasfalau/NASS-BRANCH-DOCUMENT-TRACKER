@@ -1076,9 +1076,18 @@ if ('serviceWorker' in navigator) {
         var resp=await fetch('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(fileId)+'?alt=media',{
           headers:{'Authorization':'Bearer '+token}
         });
-        if(!resp.ok)throw new Error('Drive fetch '+resp.status);
+        if(!resp.ok){
+          if((resp.status===401||resp.status===400)&&typeof _gwithToken==='function'){
+            window._gTok=null;
+            await new Promise(function(res){_gwithToken(res);});
+            token=window._gTok||token;
+            resp=await fetch('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(fileId)+'?alt=media',{
+              headers:{'Authorization':'Bearer '+token}
+            });
+            if(!resp.ok)throw new Error('Drive fetch '+resp.status);
+          }else{throw new Error('Drive fetch '+resp.status);}
+        }
         buf=await resp.arrayBuffer();
-        // Save bytes for next time; fire-and-forget so render isn't blocked
         try{_pdfCache.put(fileId,buf,fileName);}catch(e){}
       }
       var task=pdfjsLib.getDocument({data:buf});
@@ -1130,9 +1139,9 @@ if ('serviceWorker' in navigator) {
       }
       wrap.appendChild(frag);
       if(thumbs)thumbs.appendChild(thumbFrag);
-      // Initial placeholder sizing
+      // Wait one frame so browser computes layout before IO roots are measured
+      await new Promise(function(resolve){requestAnimationFrame(resolve);});
       for(var k=1;k<=_pdfTotal;k++)_pdfSizePlaceholder(k);
-      // Lazy-render via IO; root is the wrap so scroll inside it triggers
       _pdfIO=new IntersectionObserver(function(entries){
         entries.forEach(function(e){
           if(e.isIntersecting){
@@ -1143,7 +1152,6 @@ if ('serviceWorker' in navigator) {
       },{root:wrap,rootMargin:'400px 0px',threshold:0.01});
       _pdfPages.forEach(function(p){_pdfIO.observe(p.wrapEl);});
       wrap.addEventListener('scroll',_pdfOnScroll,{passive:true});
-      // Lazy-render thumbnails as they scroll into the sidebar
       if(thumbs){
         var tio=new IntersectionObserver(function(entries){
           entries.forEach(function(e){
@@ -1156,8 +1164,8 @@ if ('serviceWorker' in navigator) {
         },{root:thumbs,rootMargin:'300px 0px',threshold:0.01});
         _pdfPages.forEach(function(p){if(p.thumbEl)tio.observe(p.thumbEl);});
       }
-      // Render the first page immediately so the viewer is never blank
       await _pdfRenderPage(1);
+      _pdfRenderThumb(1); // direct fallback — IO may miss first thumb on initial paint
       _pdfUpdateChrome();
       _pdfHighlightThumb(1);
       _hideLoader();
