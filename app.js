@@ -835,33 +835,41 @@ function _gCacheSet(rid,subject,file){
 }
 
 // ── UI orchestration ──
+function _pdfLoaderText(title){
+  var l=document.getElementById('d-pdf-loading');
+  var lt=document.getElementById('d-pdf-loading-title');
+  if(lt&&title!=null)lt.textContent=title;
+  if(l)l.classList.add('pdf-loading-on');
+}
+function _pdfLoaderHide(){
+  var l=document.getElementById('d-pdf-loading');
+  if(l)l.classList.remove('pdf-loading-on');
+}
 function gdriveSearchForRecord(subject,recordId){
   var panel=document.getElementById('d-pdf-panel');
-  var loading=document.getElementById('d-pdf-loading');
-  var frame=document.getElementById('d-pdf-frame');
   var titleEl=document.getElementById('d-pdf-title');
   var openLink=document.getElementById('d-pdf-open');
   var mbox=document.querySelector('.detail-mbox');
   var subjectEl=document.getElementById('d-subject');
   if(!panel)return;
-  // Reset state — also explicitly hide the spinner so a cache hit never
-  // races with a stale 'flex' from a prior search still in flight.
-  if(frame){frame.src='';frame.style.display='none';}
+  // Reset state — also explicitly hide the loader so a cache hit never
+  // races with a stale loading state from a prior search still in flight.
   if(titleEl)titleEl.textContent='';
-  if(loading)loading.style.display='none';
+  _pdfLoaderHide();
   if(subjectEl){subjectEl.removeAttribute('href');subjectEl.classList.remove('detail-subject-linked');}
   function renderHit(fid,name,wvl){
-    if(loading)loading.style.display='none';
     if(titleEl)titleEl.textContent=(name||'').replace(/\.pdf$/i,'');
     var url=wvl||'#';
     if(openLink)openLink.href=url;
     if(subjectEl){subjectEl.href=url;subjectEl.classList.add('detail-subject-linked');}
-    if(frame){frame.src='https://drive.google.com/file/d/'+fid+'/preview';frame.style.display='block';}
     panel.style.display='flex';
     if(mbox)mbox.classList.add('detail-has-pdf');
+    if(typeof window.loadPdfIntoViewer==='function'){
+      window.loadPdfIntoViewer(fid,name,wvl,_gTok);
+    }
   }
   function renderMiss(){
-    if(loading)loading.style.display='none';
+    _pdfLoaderHide();
     panel.style.display='none';
     if(mbox)mbox.classList.remove('detail-has-pdf');
   }
@@ -874,11 +882,10 @@ function gdriveSearchForRecord(subject,recordId){
   }
   // Cache miss — show loading and fetch
   panel.style.display='flex';
-  if(loading)loading.style.display='flex';
+  _pdfLoaderText('Loading document');
   if(mbox)mbox.classList.add('detail-has-pdf');
   _gwithToken(async function(){
     var file=await _gsearch(subject);
-    if(loading)loading.style.display='none';
     _gCacheSet(recordId,subject,file);
     if(file)renderHit(file.id,file.name,file.webViewLink);else renderMiss();
   });

@@ -266,7 +266,7 @@ function _gclient(){
 function _gwithToken(cb){
   if(_gTok){cb();return;}
   var tc=_gclient();
-  if(!tc){console.warn('[Drive] GIS not ready');return;}
+  if(!tc){setTimeout(function(){_gwithToken(cb);},400);return;}
   _gTCb=cb;
   tc.requestAccessToken({prompt:''});
 }
