@@ -64,8 +64,8 @@ function _dsOpenPreview(id,name,mimeType,webViewLink){
   var isFolder=mimeType==='application/vnd.google-apps.folder';
   if(isPdf){
     panel.innerHTML=
-      '<div class="ds-preview-bar">'+
-        '<span class="ds-preview-title">'+_esc(name)+'</span>'+
+      '<div class="pdf-panel-header">'+
+        '<span class="pdf-panel-label">DRIVE SEARCH</span>'+
         '<div class="pdf-panel-actions">'+
           '<span class="pdf-page-group">'+
             '<button class="pdf-rot-btn pdf-page-btn" id="ds-pdf-prev-btn" onclick="dsPdfPrevPage()" title="Previous page">&#8249;</button>'+
@@ -83,6 +83,7 @@ function _dsOpenPreview(id,name,mimeType,webViewLink){
           '<a href="'+_esc(webViewLink||'')+'" target="_blank" class="pdf-open-link" style="margin-left:6px">Open &#8599;</a>'+
         '</div>'+
       '</div>'+
+      '<div id="ds-pdf-title-bar"></div>'+
       '<div id="ds-pdf-rotate-wrap">'+
         '<div id="ds-pdf-thumbs" aria-label="Page thumbnails"></div>'+
         '<div id="ds-pdf-canvas-wrap"></div>'+
@@ -102,7 +103,7 @@ function _dsOpenPreview(id,name,mimeType,webViewLink){
           '</div>'+
         '</div>'+
       '</div>';
-    _gwithToken(function(){window._dsPdfLoad(id,name,_gTok);});
+    _gwithToken(function(){requestAnimationFrame(function(){window._dsPdfLoad(id,name,_gTok);});});
   } else if(isFolder){
     panel.innerHTML='<div class="ds-preview-placeholder"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg><div>Preview not available for folders.</div></div>';
   } else {

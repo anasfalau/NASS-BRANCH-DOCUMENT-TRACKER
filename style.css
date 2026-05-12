@@ -393,6 +393,7 @@ th{position:relative}
 #ds-pdf-canvas-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:10px;overflow:auto;padding:10px 12px;box-sizing:border-box;background:var(--bg-pdf,#e5e7eb);min-width:0}
 #ds-pdf-loading{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:linear-gradient(180deg,#f4f6fa 0%,#e9edf3 100%);z-index:6;pointer-events:none}
 #ds-pdf-loading.pdf-loading-on{display:flex}
+#ds-pdf-title-bar{padding:9px 16px;font-size:12px;font-weight:600;color:var(--fg-ink);background:var(--bg-app);border-bottom:1px solid var(--border-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0}
 @media (max-width:760px){#ds-pdf-thumbs{display:none}}
 .pdf-panel-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .pdf-rot-btn{background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);color:var(--fg-on-navy);border-radius:var(--radius-sm);width:30px;height:28px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background var(--ease-std);padding:0;line-height:1}
@@ -993,7 +994,7 @@ body.dark .mbox,body.dark .detail-mbox{background:#0b1a30!important;border:1px s
 body.dark .detail-left{background:#0b1a30!important;border-right-color:#162640!important}
 body.dark .detail-right{background:#08152a!important}
 body.dark .mbox h3{color:#7aa3d9!important;border-bottom-color:#162640!important}
-body.dark #d-pdf-title-bar{background:#0a1728!important;color:#c8d2e4!important;border-bottom-color:#1a2b4a!important}
+body.dark #d-pdf-title-bar,body.dark #ds-pdf-title-bar{background:#0a1728!important;color:#c8d2e4!important;border-bottom-color:#1a2b4a!important}
 body.dark #d-pdf-loading{background:linear-gradient(180deg,#0e1a2e 0%,#0a1424 100%)!important}
 body.dark .pdf-load-doc{background:#1c2a3c!important;box-shadow:0 6px 24px rgba(0,0,0,0.55),0 2px 6px rgba(0,0,0,0.4)!important}
 body.dark .pdf-load-doc::before{background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,0.06) 50%,transparent 100%)!important}

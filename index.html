@@ -1280,6 +1280,7 @@ if ('serviceWorker' in navigator) {
     window._dsPdfLoad=async function(fileId,fileName,token){
       var w=_wrap(),loading=document.getElementById('ds-pdf-loading');
       _fileId=fileId;_fileName=fileName||'';
+      var _tb=document.getElementById('ds-pdf-title-bar');if(_tb)_tb.textContent=_fileName;
       _teardown();_doc=null;_page=1;_total=0;_rotByPage={};_zoom=0.75;_chrome();
       function _show(t){var lt=document.getElementById('ds-pdf-loading-title');if(lt&&t!=null)lt.textContent=t;if(loading)loading.classList.add('pdf-loading-on');}
       function _hide(){if(loading)loading.classList.remove('pdf-loading-on');}
@@ -1312,6 +1313,9 @@ if ('serviceWorker' in navigator) {
           _pages.push({num:n,wrapEl:pw,canvasEl:cv,thumbEl:tw,thumbCanvas:tcv,baseW:d.w,baseH:d.h,rendered:false,thumbRendered:false,renderTask:null,thumbTask:null});
         }
         w.appendChild(frag);if(th)th.appendChild(tfrag);
+        // Wait one frame so the browser computes layout before we read clientWidth
+        // or set up IntersectionObservers (otherwise root may have 0 dimensions)
+        await new Promise(function(resolve){requestAnimationFrame(resolve);});
         for(var k=1;k<=_total;k++)_sizePh(k);
         _io=new IntersectionObserver(function(entries){entries.forEach(function(e){if(e.isIntersecting){var n=parseInt(e.target.dataset.page,10);if(n)_renderPage(n);}});},{root:w,rootMargin:'400px 0px',threshold:0.01});
         _pages.forEach(function(p){_io.observe(p.wrapEl);});
@@ -1320,7 +1324,9 @@ if ('serviceWorker' in navigator) {
           var tio=new IntersectionObserver(function(entries){entries.forEach(function(e){if(e.isIntersecting){var n=parseInt(e.target.dataset.page,10);if(n)_renderThumb(n);tio.unobserve(e.target);}});},{root:th,rootMargin:'300px 0px',threshold:0.01});
           _pages.forEach(function(p){if(p.thumbEl)tio.observe(p.thumbEl);});
         }
-        await _renderPage(1);_chrome();_hlThumb(1);_hide();
+        await _renderPage(1);
+        _renderThumb(1); // render first thumbnail directly — IO may miss it on first paint
+        _chrome();_hlThumb(1);_hide();
       }catch(e){console.error('[DS-PDF]',e);_show('Could not load document');}
     };
     window.addEventListener('resize',function(){
