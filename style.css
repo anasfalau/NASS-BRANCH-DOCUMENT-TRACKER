@@ -327,6 +327,9 @@ body.dark .ds-pdf-mbox,.ds-pdf-mbox{background:var(--bg-card)}
 body.dark .ds-left{background:var(--bg-app)!important}
 body.dark .ds-breadcrumb-btn{color:var(--nass-navy-900)!important}
 body.dark .ds-item.ds-item-active{border-color:var(--nass-navy-900)!important;background:rgba(180,210,255,0.08)!important}
+/* Drive search — expand/collapse */
+.ds-left{transition:width 0.25s ease,min-width 0.25s ease,border-width 0.25s ease,padding 0.2s ease}
+.ds-shell.ds-preview-expanded .ds-left{width:0!important;min-width:0!important;overflow:hidden;border-right:none}
 
 /* === COLUMN RESIZER === */
 th{position:relative}
@@ -1376,6 +1379,7 @@ body.dark .ms-thread-empty{color:#526a88!important}
   .ds-left{width:100%!important;border-right:none!important;border-bottom:1px solid var(--border-divider);flex:0 0 auto;height:50vh;max-height:380px;overflow-y:auto}
   .ds-right{flex:1;min-height:220px}
   #view-drivesearch{overflow:auto}
+  .ds-shell.ds-preview-expanded .ds-left{width:100%!important;height:0!important;max-height:0!important;border-bottom:none;overflow:hidden}
 }
 
 /* ── Toast notifications ──────────────────────────────────────── */

@@ -52,9 +52,37 @@ function _dsRenderResults(files,q,folderLabel){
       '<div class="ds-actions"><a class="ds-open-btn" href="'+_esc(f.webViewLink||'')+'" target="_blank" onclick="event.stopPropagation()">Open</a></div></div>';
   }).join('');
 }
-var _dsRot=0;
+var _dsRot=0,_dsZoom=1,_dsExpanded=false;
+var _dsExpandSvg='<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>';
+var _dsCollapseSvg='<polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="10" y1="14" x2="3" y2="21"/><line x1="21" y1="3" x2="14" y2="10"/>';
+function _dsResetState(){
+  _dsRot=0;_dsZoom=1;
+  if(_dsExpanded){_dsExpanded=false;var shell=document.querySelector('.ds-shell');if(shell)shell.classList.remove('ds-preview-expanded');}
+}
+function _dsApplyTransform(){
+  var frame=document.getElementById('ds-iframe');
+  var wrap=document.getElementById('ds-iframe-wrap');
+  if(!frame||!wrap)return;
+  var lbl=document.getElementById('ds-zoom-lbl');
+  if(lbl)lbl.textContent=Math.round(_dsZoom*100)+'%';
+  if(_dsRot===0&&_dsZoom===1){
+    frame.style.cssText='position:absolute;top:0;left:0;width:100%;height:100%;border:none;transform-origin:center center';
+    return;
+  }
+  var W=wrap.clientWidth,H=wrap.clientHeight;
+  var isLandscape=_dsRot===90||_dsRot===270;
+  var baseW=isLandscape?H:W,baseH=isLandscape?W:H;
+  frame.style.width=baseW*_dsZoom+'px';
+  frame.style.height=baseH*_dsZoom+'px';
+  frame.style.left=((W-baseW*_dsZoom)/2)+'px';
+  frame.style.top='0px';
+  frame.style.position='absolute';
+  frame.style.border='none';
+  frame.style.transformOrigin='center center';
+  frame.style.transform='rotate('+_dsRot+'deg)';
+}
 function _dsOpenPreview(id,name,mimeType,webViewLink){
-  _dsRot=0;
+  _dsResetState();
   var panel=document.getElementById('ds-preview-panel');if(!panel)return;
   document.querySelectorAll('#ds-results .ds-item').forEach(function(el){el.classList.remove('ds-item-active');});
   var active=document.getElementById('dsi-'+id);if(active)active.classList.add('ds-item-active');
@@ -75,6 +103,16 @@ function _dsOpenPreview(id,name,mimeType,webViewLink){
     '<div class="pdf-panel-actions">'+
       '<button class="pdf-rot-btn" onclick="_dsRotate(-90)" title="Rotate left">↺</button>'+
       '<button class="pdf-rot-btn" onclick="_dsRotate(90)" title="Rotate right">↻</button>'+
+      '<span class="pdf-zoom-group">'+
+        '<button class="pdf-rot-btn pdf-zoom-btn" onclick="_dsZoomFn(-0.25)" title="Zoom out">&#8722;</button>'+
+        '<span id="ds-zoom-lbl" class="pdf-zoom-lbl">100%</span>'+
+        '<button class="pdf-rot-btn pdf-zoom-btn" onclick="_dsZoomFn(+0.25)" title="Zoom in">&#43;</button>'+
+      '</span>'+
+      '<button class="pdf-rot-btn pdf-expand-btn" id="ds-expand-btn" onclick="_dsToggleExpand()" title="Expand preview">'+
+        '<svg id="ds-expand-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">'+
+          _dsExpandSvg+
+        '</svg>'+
+      '</button>'+
       '<a href="'+dlUrl+'" target="_blank" download class="pdf-rot-btn" title="Download" style="text-decoration:none;display:flex;align-items:center;justify-content:center;font-size:15px">⤓</a>'+
       '<a href="'+_esc(webViewLink)+'" target="_blank" class="pdf-open-link" style="margin-left:6px">Open ↗</a>'+
     '</div>'+
@@ -85,11 +123,21 @@ function _dsOpenPreview(id,name,mimeType,webViewLink){
 }
 function _dsRotate(delta){
   _dsRot=(_dsRot+delta+360)%360;
-  var frame=document.getElementById('ds-iframe');
-  if(!frame)return;
-  frame.style.transform='rotate('+_dsRot+'deg)';
-  if(_dsRot===90||_dsRot===270){frame.style.width=frame.parentElement.offsetHeight+'px';frame.style.height=frame.parentElement.offsetWidth+'px';frame.style.position='relative';frame.style.top=((frame.parentElement.offsetHeight-frame.parentElement.offsetWidth)/2)+'px';frame.style.left=((frame.parentElement.offsetWidth-frame.parentElement.offsetHeight)/2)+'px';}
-  else{frame.style.width='100%';frame.style.height='100%';frame.style.position='absolute';frame.style.top='0';frame.style.left='0';}
+  _dsApplyTransform();
+}
+function _dsZoomFn(delta){
+  _dsZoom=Math.min(3,Math.max(0.25,_dsZoom+delta));
+  _dsApplyTransform();
+}
+function _dsToggleExpand(){
+  _dsExpanded=!_dsExpanded;
+  var shell=document.querySelector('.ds-shell');
+  if(shell)shell.classList.toggle('ds-preview-expanded',_dsExpanded);
+  var btn=document.getElementById('ds-expand-btn');
+  var icon=document.getElementById('ds-expand-icon');
+  if(btn)btn.title=_dsExpanded?'Restore split view':'Expand preview';
+  if(icon)icon.innerHTML=_dsExpanded?_dsCollapseSvg:_dsExpandSvg;
+  if(_dsRot!==0||_dsZoom!==1)setTimeout(_dsApplyTransform,260);
 }
 function _dsBrowseFolder(folderId,folderName){
   var resEl=document.getElementById('ds-results');
@@ -118,7 +166,7 @@ function _dsUpdateBreadcrumb(){
           :'<span style="font-weight:600;color:var(--fg-ink)">'+_esc(seg.name)+'</span>');
     }).join('');
 }
-function _dsBreadcrumbHome(){_dsBreadcrumb=[];_dsUpdateBreadcrumb();var resEl=document.getElementById('ds-results');resEl.innerHTML='<div class="ds-empty-state">Enter a search term to find documents in Google Drive.</div>';var panel=document.getElementById('ds-preview-panel');if(panel)panel.innerHTML='<div class="ds-preview-placeholder"><svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg><div>Select a file to preview</div></div>';}
+function _dsBreadcrumbHome(){_dsResetState();_dsBreadcrumb=[];_dsUpdateBreadcrumb();var resEl=document.getElementById('ds-results');resEl.innerHTML='<div class="ds-empty-state">Enter a search term to find documents in Google Drive.</div>';var panel=document.getElementById('ds-preview-panel');if(panel)panel.innerHTML='<div class="ds-preview-placeholder"><svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg><div>Select a file to preview</div></div>';}
 function _dsBreadcrumbTo(idx){var seg=_dsBreadcrumb[idx];_dsBreadcrumb=_dsBreadcrumb.slice(0,idx);_dsBrowseFolder(seg.id,seg.name);}
 /* ── Multi-strategy parallel query ─────────────────────────────── */
 async function _dsMultiQuery(q){
