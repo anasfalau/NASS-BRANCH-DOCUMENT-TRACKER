@@ -320,7 +320,9 @@ body.dark .ds-pdf-mbox,.ds-pdf-mbox{background:var(--bg-card)}
 .ds-preview-placeholder svg{opacity:0.35}
 #ds-iframe{width:100%;flex:1;border:none;min-height:0;background:var(--bg-pdf)}
 .ds-preview-bar{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--nass-navy-300);color:var(--fg-on-navy);flex-shrink:0;gap:10px}
-.ds-preview-title{font-size:12px;font-weight:600;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ds-preview-title-wrap{display:flex;flex-direction:column;min-width:0;flex:1;gap:1px}
+.ds-preview-title{font-size:12px;font-weight:600;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ds-preview-path{font-size:10px;opacity:0.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:400}
 .ds-item.ds-item-active{border-color:var(--nass-navy-700)!important;background:rgba(0,35,100,0.06)!important}
 .ds-folder-browse-btn{background:var(--nass-navy-700);color:var(--fg-on-navy);padding:5px 12px;border-radius:var(--radius-sm);font-size:11px;font-weight:600;border:none;cursor:pointer;font-family:var(--font-sans);white-space:nowrap}
 .ds-folder-browse-btn:hover{background:var(--nass-navy-400)}

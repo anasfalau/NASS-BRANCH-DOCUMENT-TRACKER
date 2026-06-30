@@ -11,11 +11,24 @@ function driveSearch(){
   _gwithToken(async function(){
     try{
       var files=await _dsMultiQuery(q);
-      _dsRenderResults(files,q,null);
+      var folderMap=await _dsFetchFolderNames(files);
+      _dsRenderResults(files,q,null,folderMap);
     }catch(e){resEl.innerHTML='<div class="ds-empty-state" style="color:#c0392b">Search failed: '+_esc(e.message)+'</div>';console.error('[DriveSearch]',e);}
   });
 }
-function _dsRenderResults(files,q,folderLabel){
+async function _dsFetchFolderNames(files){
+  var parentIds=[];var seen=new Set();
+  files.forEach(function(f){(f.parents||[]).forEach(function(pid){if(!seen.has(pid)){seen.add(pid);parentIds.push(pid);}});});
+  if(!parentIds.length||!_gTok)return{};
+  var hdr={'Authorization':'Bearer '+_gTok};
+  var results=await Promise.all(parentIds.map(function(pid){
+    return fetch('https://www.googleapis.com/drive/v3/files/'+pid+'?fields=id,name',{headers:hdr})
+      .then(function(r){return r.json();}).catch(function(){return null;});
+  }));
+  var map={};results.forEach(function(r){if(r&&r.id&&r.name)map[r.id]=r.name;});
+  return map;
+}
+function _dsRenderResults(files,q,folderLabel,folderMap,browsePath){
   var resEl=document.getElementById('ds-results');
   if(!files.length){resEl.innerHTML='<div class="ds-empty-state">No documents found'+(q?' for "'+_esc(q)+'"':'')+'.</div>';return;}
   var folders=files.filter(function(f){return f.mimeType==='application/vnd.google-apps.folder';});
@@ -36,6 +49,10 @@ function _dsRenderResults(files,q,folderLabel){
     var safeLink=(f.webViewLink||'').replace(/'/g,'');
     var safeId=f.id.replace(/'/g,'');
     var safeMime=(f.mimeType||'').replace(/'/g,'');
+    var parentId=(f.parents&&f.parents[0])||'';
+    var folderName=folderMap&&parentId?folderMap[parentId]||'':'';
+    if(!folderName&&browsePath)folderName=browsePath;
+    var safeFolderName=folderName.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
     if(item.isFolder){
       return'<div class="ds-item" style="cursor:default">'+
         '<span class="ds-icon">'+icon+'</span>'+
@@ -43,7 +60,7 @@ function _dsRenderResults(files,q,folderLabel){
         '<div class="ds-meta"><span class="ds-type-badge">Folder</span></div></div>'+
         '<div class="ds-actions"><button class="ds-folder-browse-btn" onclick="_dsBrowseFolder(\''+safeId+'\',\''+safeName+'\')">Browse</button></div></div>';
     }
-    return'<div class="ds-item" id="dsi-'+safeId+'" onclick="_dsOpenPreview(\''+safeId+'\',\''+safeName+'\',\''+safeMime+'\',\''+safeLink+'\')" style="cursor:pointer">'+
+    return'<div class="ds-item" id="dsi-'+safeId+'" onclick="_dsOpenPreview(\''+safeId+'\',\''+safeName+'\',\''+safeMime+'\',\''+safeLink+'\',\''+safeFolderName+'\')" style="cursor:pointer">'+
       '<span class="ds-icon">'+icon+'</span>'+
       '<div class="ds-info">'+
         '<div class="ds-name">'+(q?_dsHighlight(_esc(f.name),q):_esc(f.name))+'</div>'+
@@ -81,7 +98,7 @@ function _dsApplyTransform(){
   frame.style.transformOrigin='center center';
   frame.style.transform='rotate('+_dsRot+'deg)';
 }
-function _dsOpenPreview(id,name,mimeType,webViewLink){
+function _dsOpenPreview(id,name,mimeType,webViewLink,folderPath){
   _dsResetState();
   var panel=document.getElementById('ds-preview-panel');if(!panel)return;
   document.querySelectorAll('#ds-results .ds-item').forEach(function(el){el.classList.remove('ds-item-active');});
@@ -99,7 +116,10 @@ function _dsOpenPreview(id,name,mimeType,webViewLink){
   var isPreviewable=mimeType!=='application/vnd.google-apps.folder';
   var dlUrl='https://drive.google.com/uc?export=download&id='+id;
   panel.innerHTML='<div class="ds-preview-bar">'+
-    '<span class="ds-preview-title">'+_esc(name)+'</span>'+
+    '<div class="ds-preview-title-wrap">'+
+      '<span class="ds-preview-title">'+_esc(name)+'</span>'+
+      (folderPath?'<span class="ds-preview-path">📁 '+_esc(folderPath)+'</span>':'')+
+    '</div>'+
     '<div class="pdf-panel-actions">'+
       '<button class="pdf-rot-btn" onclick="_dsRotate(-90)" title="Rotate left">↺</button>'+
       '<button class="pdf-rot-btn" onclick="_dsRotate(90)" title="Rotate right">↻</button>'+
@@ -150,7 +170,8 @@ function _dsBrowseFolder(folderId,folderName){
       var hdr={'Authorization':'Bearer '+_gTok};
       var res=await fetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent("'"+folderId+"' in parents and trashed=false")+tail,{headers:hdr});
       var data=await res.json();
-      _dsRenderResults(data.files||[],null,_esc(folderName)+' — '+(data.files||[]).length+' item'+((data.files||[]).length===1?'':'s'));
+      var bcrumb=_dsBreadcrumb.map(function(s){return s.name;}).join(' › ');
+      _dsRenderResults(data.files||[],null,_esc(folderName)+' — '+(data.files||[]).length+' item'+((data.files||[]).length===1?'':'s'),null,bcrumb);
     }catch(e){resEl.innerHTML='<div class="ds-empty-state" style="color:#c0392b">Failed to load folder: '+_esc(e.message)+'</div>';}
   });
 }
@@ -172,7 +193,7 @@ function _dsBreadcrumbTo(idx){var seg=_dsBreadcrumb[idx];_dsBreadcrumb=_dsBreadc
 async function _dsMultiQuery(q){
   var seen=new Map();
   var add=function(files){(files||[]).forEach(function(f){if(!seen.has(f.id))seen.set(f.id,f);});};
-  var flds='files(id,name,mimeType,modifiedTime,webViewLink,size)';
+  var flds='files(id,name,mimeType,modifiedTime,webViewLink,size,parents)';
   var tail='&fields='+flds+'&pageSize=30&supportsAllDrives=true&includeItemsFromAllDrives=true';
   var hdr={'Authorization':'Bearer '+_gTok};
   var qc=q.replace(/'/g,'');
