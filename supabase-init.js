@@ -253,10 +253,33 @@ function isModalOpen() {
 // Fetch all records from nass_records + config from nass_settings
 // into localStorage. On first run (empty table), migrates from the
 // old nass_settings blob automatically.
+// Supabase/PostgREST caps a response at 1,000 rows by default, so
+// read records in ordered pages to keep the browser's full register.
+async function fetchAllRecords(sb, columns) {
+  const pageSize = 1000;
+  const records = [];
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await sb
+      .from('nass_records')
+      .select(columns || '*')
+      .order('sort_order', { ascending: true })
+      .range(from, from + pageSize - 1);
+
+    if (error) return { data: null, error };
+    records.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return { data: records, error: null };
+}
+
 async function pullData(sb) {
-  // Run both fetches in parallel — independent queries
+  // Run paged record loading and settings fetch in parallel.
   const [{ data: records, error: recErr }, { data: settings }] = await Promise.all([
-    sb.from('nass_records').select('*').order('sort_order', { ascending: true }),
+    fetchAllRecords(sb),
     sb.from('nass_settings').select('key, value')
   ]);
 
