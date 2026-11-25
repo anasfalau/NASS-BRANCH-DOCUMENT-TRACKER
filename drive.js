@@ -89,14 +89,14 @@ function _dsApplyTransform(){
   var W=wrap.clientWidth,H=wrap.clientHeight;
   var isLandscape=_dsRot===90||_dsRot===270;
   var baseW=isLandscape?H:W,baseH=isLandscape?W:H;
-  frame.style.width=baseW*_dsZoom+'px';
-  frame.style.height=baseH*_dsZoom+'px';
-  frame.style.left=((W-baseW*_dsZoom)/2)+'px';
-  frame.style.top='0px';
+  frame.style.width=baseW+'px';
+  frame.style.height=baseH+'px';
+  frame.style.left=((W-baseW)/2)+'px';
+  frame.style.top=((H-baseH)/2)+'px';
   frame.style.position='absolute';
   frame.style.border='none';
   frame.style.transformOrigin='center center';
-  frame.style.transform='rotate('+_dsRot+'deg)';
+  frame.style.transform='rotate('+_dsRot+'deg) scale('+_dsZoom+')';
 }
 function _dsOpenPreview(id,name,mimeType,webViewLink,folderPath){
   _dsResetState();
@@ -159,6 +159,7 @@ function _dsToggleExpand(){
   if(icon)icon.innerHTML=_dsExpanded?_dsCollapseSvg:_dsExpandSvg;
   if(_dsRot!==0||_dsZoom!==1)setTimeout(_dsApplyTransform,260);
 }
+window.addEventListener('resize',function(){if(_dsRot!==0||_dsZoom!==1)_dsApplyTransform();});
 function _dsBrowseFolder(folderId,folderName){
   var resEl=document.getElementById('ds-results');
   resEl.innerHTML='<div class="ds-loading"><span class="ds-spinner"></span>Loading folder…</div>';

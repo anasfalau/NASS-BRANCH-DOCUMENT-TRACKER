@@ -716,18 +716,14 @@ if ('serviceWorker' in navigator) {
       return;
     }
     var W = wrap.offsetWidth, H = wrap.offsetHeight;
-    if (_pdfRot === 90 || _pdfRot === 270) {
-      frame.style.width  = (H * _pdfZoom) + 'px';
-      frame.style.height = (W * _pdfZoom) + 'px';
-      frame.style.left   = ((W - H * _pdfZoom) / 2) + 'px';
-      frame.style.top    = ((H - W * _pdfZoom) / 2) + 'px';
-    } else {
-      frame.style.width  = (W * _pdfZoom) + 'px';
-      frame.style.height = (H * _pdfZoom) + 'px';
-      frame.style.left   = '0px';
-      frame.style.top    = '0px';
-    }
-    frame.style.transform = 'rotate(' + _pdfRot + 'deg)';
+    var landscape = _pdfRot === 90 || _pdfRot === 270;
+    var baseW = landscape ? H : W;
+    var baseH = landscape ? W : H;
+    frame.style.width  = baseW + 'px';
+    frame.style.height = baseH + 'px';
+    frame.style.left   = ((W - baseW) / 2) + 'px';
+    frame.style.top    = ((H - baseH) / 2) + 'px';
+    frame.style.transform = 'rotate(' + _pdfRot + 'deg) scale(' + _pdfZoom + ')';
     var lbl = document.getElementById('d-pdf-zoom-lbl');
     if (lbl) lbl.textContent = Math.round(_pdfZoom * 100) + '%';
   }
