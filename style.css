@@ -323,6 +323,8 @@ body.dark .ds-pdf-mbox,.ds-pdf-mbox{background:var(--bg-card)}
 .ds-doc-chat{width:330px;max-width:42%;flex:0 0 330px;display:flex;flex-direction:column;min-width:240px;background:var(--bg-card);border-left:1px solid var(--border-divider)}
 .ds-doc-chat-head{padding:14px 14px 10px;border-bottom:1px solid var(--border-soft);font-size:13px;font-weight:700;color:var(--fg-ink)}
 .ds-doc-chat-head small{display:block;margin-top:4px;font-size:10px;font-weight:400;color:var(--fg-subtle)}
+.ds-chat-consent{display:flex;align-items:flex-start;gap:7px;margin-top:9px;font-size:10px;line-height:1.4;font-weight:400;color:var(--fg-subtle);cursor:pointer}
+.ds-chat-consent input{margin:1px 0 0;flex:0 0 auto}
 .ds-chat-messages{flex:1;min-height:0;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
 .ds-chat-welcome,.ds-chat-error{font-size:12px;line-height:1.55;color:var(--fg-subtle);padding:10px;background:var(--bg-app);border-radius:8px}
 .ds-chat-error{color:#a32929}
