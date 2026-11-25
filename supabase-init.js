@@ -65,6 +65,7 @@ var rowIds = [];
   await loadScript('utils.js');
   await loadScript('tracker.js');
   await loadScript('drive.js');
+  await loadScript('drive-chat.js');
   await loadScript('dashboard.js');
   await loadScript('admin.js');
   await loadScript('inbox.js');
