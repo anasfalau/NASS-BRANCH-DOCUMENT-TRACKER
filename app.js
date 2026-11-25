@@ -686,7 +686,7 @@ function _gScore(subject,filename,idf){
   if(!terms.length)return 0;
   // Exact phrase bonus
   var subNorm=subject.toLowerCase().replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim();
-  if(fname.includes(subNorm.slice(0,30)))return 1.0;
+  if(subNorm.length>=10&&fname.includes(subNorm))return 1.0;
   var total=0,matched=0,missed=0;
   terms.forEach(function(t){
     var boost=t.acronym?2.5:1.0;
@@ -718,90 +718,12 @@ function _gScore(subject,filename,idf){
   return Math.min(1.0,Math.max(0,(matched-missed*2)/total)+seqBonus);
 }
 
-// ── Fetch PDF candidates — exact-phrase query first, then per-term fullText+name ──
-// Files matched by an exact-phrase query are tagged f._phrase=true so the scorer
-// can short-circuit to only those candidates (true exact-text match).
-// Note: file_ref is an internal identifier (e.g. "NHQ:020/278/25") — it's not in
-// PDF filenames or content, so we never search against it.
-async function _gCandidates(subject){
-  var terms=_gDistinct(subject,5).map(function(t){return t.w;});
-  var seen=new Map();
-  var tail='&fields=files(id,name,webViewLink)&pageSize=20&supportsAllDrives=true&includeItemsFromAllDrives=true';
-  var hdr={'Authorization':'Bearer '+_gTok};
-  // ── Build exact-phrase query from full subject ──
-  // Drive's `fullText contains 'multi word string'` performs phrase matching.
-  var phraseQ=[];
-  var subjPhrase=(subject||'').replace(/[^A-Za-z0-9\s]/g,' ').replace(/\s+/g,' ').trim().slice(0,80);
-  if(subjPhrase.length>=10){
-    var sp=subjPhrase.replace(/'/g,"\\'");
-    phraseQ.push("mimeType='application/pdf' and trashed=false and fullText contains '"+sp+"'");
-  }
-  if(!terms.length && !phraseQ.length)return[];
-  console.log('[Drive] Phrase queries:',phraseQ.length,' Term queries:',terms.length*2,' Terms:',terms);
-  // Build fullText + name query pair per term and fire phrase + term queries in parallel
-  var allQ=phraseQ.slice();
-  var phraseQCount=phraseQ.length;
-  terms.forEach(function(kw){
-    var k=kw.replace(/'/g,'');
-    allQ.push("mimeType='application/pdf' and trashed=false and fullText contains '"+k+"'");
-    allQ.push("mimeType='application/pdf' and trashed=false and name contains '"+k+"'");
-  });
-  var results=await Promise.all(allQ.map(function(q){
-    return fetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+tail,{headers:hdr})
-      .then(function(r){if(r.status===401){_gTok=null;return{files:[]};}return r.json();})
-      .then(function(d){return d.files||[];}).catch(function(){return[];});
-  }));
-  // Tag files that came from a phrase query so _gsearch can prefer them
-  results.forEach(function(files,idx){
-    var isPhrase=idx<phraseQCount;
-    files.forEach(function(f){
-      if(!seen.has(f.id)){if(isPhrase)f._phrase=true;seen.set(f.id,f);}
-      else if(isPhrase)seen.get(f.id)._phrase=true;
-    });
-  });
-  return Array.from(seen.values());
-}
-
-// ── One-time folder reachability check ──
-var _gFolderChecked=false;
-async function _gCheckFolder(){
-  if(_gFolderChecked)return;
-  _gFolderChecked=true;
-  // Probe: list immediate children (may be subfolders) and any PDFs directly inside
-  var q=encodeURIComponent("'"+GDRIVE_FOLDER_ID+"' in parents and trashed=false");
-  var res=await fetch('https://www.googleapis.com/drive/v3/files?q='+q+'&fields=files(id,name,mimeType)&pageSize=10&supportsAllDrives=true&includeItemsFromAllDrives=true',{headers:{'Authorization':'Bearer '+_gTok}});
-  var d=await res.json();
-  console.log('[Drive] Folder children (',res.status,'):');
-  (d.files||[]).forEach(function(f,i){console.log('  ['+i+']',f.mimeType==='application/vnd.google-apps.folder'?'[FOLDER]':'[FILE]',f.name);});
-  if(d.error)console.error('[Drive] Probe error:',d.error);
-}
+// Record lookup matches scanned PDF filenames to the subject/description.
+async function _gCandidates(subject,folderIds){return _gFetchCandidates(subject,folderIds);}
 
 // ── Find best matching PDF ──
 async function _gsearch(subject){
-  await _gCheckFolder();
-  var candidates=await _gCandidates(subject);
-  if(!candidates||!candidates.length){
-    console.log('[Drive] No candidates found for:',subject.substring(0,60));
-    return null;
-  }
-  // Exact-phrase short-circuit: if any candidate matched the full subject as
-  // a phrase, restrict scoring to that pool — they are the truest "exact text"
-  // hits and shouldn't lose to a generic term-overlap winner.
-  var phraseCands=candidates.filter(function(f){return f._phrase;});
-  var pool=phraseCands.length?phraseCands:candidates;
-  // Compute IDF from the pool — generic terms (in many files) get low weight
-  var gTerms=_gDistinct(subject,12);
-  var cFnames=pool.map(function(f){return f.name;});
-  var idf=_computeIDF(gTerms,cFnames);
-  var best=null,bestScore=0,THRESHOLD=0.08;
-  pool.forEach(function(f){
-    var s=_gScore(subject,f.name,idf);
-    if(s>bestScore){bestScore=s;best=f;}
-  });
-  // Phrase pool of size 1 is the unambiguous exact-match case
-  if(phraseCands.length===1){best=phraseCands[0];bestScore=Math.max(bestScore,1.0);}
-  console.log('[Drive] Pool:',pool.length,'(phrase:'+phraseCands.length+'/'+candidates.length+')',' Best:',best?best.name:'none',' Score:',bestScore.toFixed(3));
-  return bestScore>=THRESHOLD?best:null;
+  return _gFolderFirstSearch(subject);
 }
 
 // ── Per-record result cache ──
@@ -823,14 +745,14 @@ function _gCacheLoad(){
 function _gCacheGet(rid,subject){
   if(!rid)return undefined;
   var c=_gCacheLoad()[rid];
-  if(!c||c.sub!==subject)return undefined;
+  if(!c||c.v!==2||c.sub!==subject)return undefined;
   var ttl=c.fid?_GCACHE_HIT_TTL:_GCACHE_MISS_TTL;
   return Date.now()-c.ts>ttl?undefined:c;
 }
 function _gCacheSet(rid,subject,file){
   if(!rid)return;
   var c=_gCacheLoad();
-  c[rid]={sub:subject,fid:file?file.id:null,name:file?file.name:null,wvl:file?file.webViewLink:null,ts:Date.now()};
+  c[rid]={v:2,sub:subject,fid:file?file.id:null,name:file?file.name:null,wvl:file?file.webViewLink:null,ts:Date.now()};
   localStorage.setItem(_GCACHE_KEY,JSON.stringify(c));
 }
 

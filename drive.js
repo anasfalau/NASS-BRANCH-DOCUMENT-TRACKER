@@ -290,6 +290,7 @@ function dsPreview(id,name,link){_dsOpenPreview(id,name,'application/pdf',link||
 // ── Google Drive PDF Integration ──────────────────────────────
 var GDRIVE_CLIENT_ID='1073280029907-0166ddlukbg2mg6mprp6hlk34l9fsj5a.apps.googleusercontent.com';
 var GDRIVE_FOLDER_ID='1aIq34zv9PNbV--h7xPC1r_p8_uZ6VjSk'; // Documents/2026 CNASS OUTGOING SCANNED DOCUMENTS
+var GDRIVE_INCOMING_FOLDER_ID=window.NASS_DRIVE_INCOMING_FOLDER_ID||'';
 var _gTok=null,_gTC=null,_gTCb=null;
 
 // ── Token client ──
@@ -362,7 +363,7 @@ function _gScore(subject,filename,idf){
   if(!terms.length)return 0;
   // Exact phrase bonus
   var subNorm=subject.toLowerCase().replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim();
-  if(fname.includes(subNorm.slice(0,30)))return 1.0;
+  if(subNorm.length>=10&&fname.includes(subNorm))return 1.0;
   var total=0,matched=0,missed=0;
   terms.forEach(function(t){
     var boost=t.acronym?2.5:1.0;
@@ -377,66 +378,142 @@ function _gScore(subject,filename,idf){
   return Math.max(0,(matched-missed*2)/total);
 }
 
-// ── Fetch PDF candidates — parallel fullText + name queries, 5 terms ──
-async function _gCandidates(subject,fileref){
-  var subjectWords=_gDistinct(subject,5).map(function(t){return t.w;});
-  // Pull alphanumeric chunks from file ref (handles "NHQ:020/278/25/VOL.I" etc.)
-  var refChunks=((fileref||'').match(/[A-Z0-9]{4,}/gi)||[]).slice(0,3).map(function(s){return s.toLowerCase();});
-  var terms=subjectWords.concat(refChunks).filter(function(w,i,a){return a.indexOf(w)===i;}).slice(0,6);
-  if(!terms.length)return[];
-  console.log('[Drive] Querying with terms:',terms);
-  var seen=new Map();
-  var tail='&fields=files(id,name,webViewLink)&pageSize=20&supportsAllDrives=true&includeItemsFromAllDrives=true';
-  var hdr={'Authorization':'Bearer '+_gTok};
-  // Build fullText + name query pair per term and fire all in parallel
-  var allQ=[];
-  terms.forEach(function(kw){
-    var k=kw.replace(/'/g,'');
-    allQ.push("mimeType='application/pdf' and trashed=false and fullText contains '"+k+"'");
-    allQ.push("mimeType='application/pdf' and trashed=false and name contains '"+k+"'");
+// The file reference isn't part of scanned filenames; record lookup searches titles only.
+async function _gCandidates(subject,folderIds){return _gFetchCandidates(subject,folderIds);}
+
+// ── Folder-first record lookup ───────────────────────────────────
+// The outgoing folder is configured above. Incoming can be configured by
+// setting window.NASS_DRIVE_INCOMING_FOLDER_ID; otherwise discover its
+// matching sibling beside the outgoing folder.
+var _gFolderTreeCache=new Map();
+var _gFolderTreeTtl=10*60*1000;
+var _gIncomingFolderCache={id:'',time:0};
+function _gDriveUrl(path,params){
+  var url='https://www.googleapis.com/drive/v3/'+path;
+  var pairs=[];
+  Object.keys(params||{}).forEach(function(k){if(params[k]!=null&&params[k]!=='')pairs.push(encodeURIComponent(k)+'='+encodeURIComponent(params[k]));});
+  return url+(pairs.length?'?'+pairs.join('&'):'');
+}
+async function _gDriveJson(url){
+  var res=await fetch(url,{headers:{'Authorization':'Bearer '+_gTok}});
+  var data=await res.json().catch(function(){return{};});
+  if(!res.ok||data.error)throw new Error((data.error&&data.error.message)||('Google Drive request failed ('+res.status+')'));
+  return data;
+}
+async function _gDriveList(q,fields,maxPages){
+  var files=[],pageToken=null;
+  for(var page=0;page<(maxPages||2);page++){
+    var data=await _gDriveJson(_gDriveUrl('files',{q:q,fields:'nextPageToken,files('+fields+')',pageSize:100,pageToken:pageToken,supportsAllDrives:true,includeItemsFromAllDrives:true}));
+    files=files.concat(data.files||[]);
+    pageToken=data.nextPageToken;
+    if(!pageToken)break;
+  }
+  return files;
+}
+async function _gDiscoverIncomingSibling(){
+  var explicit=String(GDRIVE_INCOMING_FOLDER_ID||'');
+  var linkId=explicit.match(/\/folders\/([\w-]+)/)||explicit.match(/[?&]id=([\w-]+)/);
+  if(linkId)return decodeURIComponent(linkId[1]);
+  if(explicit)return explicit;
+  if(Date.now()-_gIncomingFolderCache.time<_gFolderTreeTtl)return _gIncomingFolderCache.id;
+  try{
+    var outgoing=await _gDriveJson(_gDriveUrl('files/'+encodeURIComponent(GDRIVE_FOLDER_ID),{fields:'id,name,parents',supportsAllDrives:true}));
+    var parent=(outgoing.parents||[])[0];
+    if(!parent)return '';
+    var siblings=await _gDriveList("'"+parent+"' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false",'id,name,mimeType',3);
+    var incoming=siblings.filter(function(f){return /\bincoming\b/i.test(f.name||'');});
+    var expected=(outgoing.name||'').replace(/outgoing/ig,'incoming').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+    var exact=incoming.filter(function(f){return(f.name||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()===expected;});
+    if(exact.length===1){_gIncomingFolderCache={id:exact[0].id,time:Date.now()};return exact[0].id;}
+    if(incoming.length===1){_gIncomingFolderCache={id:incoming[0].id,time:Date.now()};return incoming[0].id;}
+    if(incoming.length>1)console.warn('[Drive] Multiple incoming sibling folders found; configure NASS_DRIVE_INCOMING_FOLDER_ID to choose one.');
+  }catch(e){console.warn('[Drive] Could not discover incoming sibling folder:',e.message);}
+  _gIncomingFolderCache={id:'',time:Date.now()};
+  return '';
+}
+async function _gResolveSearchRoots(){
+  var roots=[];
+  if(GDRIVE_FOLDER_ID)roots.push(GDRIVE_FOLDER_ID);
+  var incoming=await _gDiscoverIncomingSibling();
+  if(incoming)roots.push(incoming);
+  return roots.filter(function(id,i,a){return id&&a.indexOf(id)===i;});
+}
+async function _gExpandSearchFolders(roots){
+  var key=roots.slice().sort().join('|'),cached=_gFolderTreeCache.get(key);
+  if(cached&&Date.now()-cached.time<_gFolderTreeTtl)return cached.ids.slice();
+  var ids=roots.slice(),seen=new Set(ids),queue=roots.slice(),maxFolders=200;
+  while(queue.length&&ids.length<maxFolders){
+    var batch=queue.splice(0,4);
+    var children=await Promise.all(batch.map(function(parent){
+      var q="'"+parent+"' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false";
+      return _gDriveList(q,'id,name,mimeType',3).catch(function(e){console.warn('[Drive] Folder listing failed:',e.message);return[];});
+    }));
+    children.forEach(function(list){list.forEach(function(f){if(f.id&&!seen.has(f.id)&&ids.length<maxFolders){seen.add(f.id);ids.push(f.id);queue.push(f.id);}});});
+  }
+  if(queue.length)console.warn('[Drive] Folder search scope reached the 200-folder safety cap.');
+  _gFolderTreeCache.set(key,{time:Date.now(),ids:ids.slice()});
+  return ids;
+}
+function _gLimitedMap(items,limit,worker){
+  var out=new Array(items.length),next=0;
+  var workers=Array.from({length:Math.min(limit,items.length)},async function(){
+    while(next<items.length){var i=next++;try{out[i]=await worker(items[i],i);}catch(e){out[i]=null;console.warn('[Drive] Candidate query failed:',e.message);}}
   });
-  var results=await Promise.all(allQ.map(function(q){
-    return fetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+tail,{headers:hdr})
-      .then(function(r){if(r.status===401){_gTok=null;return{files:[]};}return r.json();})
-      .then(function(d){return d.files||[];}).catch(function(){return[];});
-  }));
-  results.forEach(function(files){files.forEach(function(f){if(!seen.has(f.id))seen.set(f.id,f);});});
+  return Promise.all(workers).then(function(){return out;});
+}
+function _gEscapeQueryLiteral(value){return String(value||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
+async function _gFetchCandidates(subject,folderIds){
+  var terms=_gDistinct(subject,5).map(function(t){return t.w;});
+  var phrase=(subject||'').replace(/[^A-Za-z0-9\s]/g,' ').replace(/\s+/g,' ').trim().slice(0,80);
+  if(!terms.length&&phrase.length<10)return[];
+  var parentGroups=[null];
+  if(folderIds&&folderIds.length){parentGroups=[];for(var i=0;i<folderIds.length;i+=35)parentGroups.push(folderIds.slice(i,i+35));}
+  var queries=[];
+  parentGroups.forEach(function(group){
+    var parentClause=group?' and ('+group.map(function(id){return"'"+id+"' in parents";}).join(' or ')+')':'';
+    var base="mimeType='application/pdf' and trashed=false"+parentClause;
+    if(phrase.length>=10&&phrase.length<=80)queries.push({q:base+" and name contains '"+_gEscapeQueryLiteral(phrase)+"'",phrase:true});
+    terms.forEach(function(term){queries.push({q:base+" and name contains '"+_gEscapeQueryLiteral(term)+"'",phrase:false});});
+  });
+  var results=await _gLimitedMap(queries,4,function(item){
+    return _gDriveList(item.q,'id,name,mimeType,webViewLink,parents,modifiedTime',2).then(function(files){return{files:files,phrase:item.phrase};});
+  });
+  var seen=new Map();
+  results.forEach(function(result){if(!result)return;result.files.forEach(function(f){
+    if(!seen.has(f.id)){if(result.phrase)f._phrase=true;seen.set(f.id,f);}
+    else if(result.phrase)seen.get(f.id)._phrase=true;
+  });});
   return Array.from(seen.values());
 }
+function _gBestCandidate(subject,candidates){
+  if(!candidates.length)return{file:null,score:0};
+  var phrase=candidates.filter(function(f){return f._phrase;}),pool=phrase.length?phrase:candidates;
+  var terms=_gDistinct(subject,12),idf=_computeIDF(terms,pool.map(function(f){return f.name;}));
+  var best=null,bestScore=0;
+  pool.forEach(function(f){var score=_gScore(subject,f.name,idf);if(score>bestScore){best=f;bestScore=score;}});
+  if(phrase.length===1){best=phrase[0];bestScore=1;}
+  return{file:best,score:bestScore};
+}
+async function _gFolderFirstSearch(subject){
+  var folderCandidates=[];
+  try{
+    var roots=await _gResolveSearchRoots();
+    if(roots.length){var folders=await _gExpandSearchFolders(roots);folderCandidates=await _gFetchCandidates(subject,folders);}
+  }catch(e){console.warn('[Drive] Folder-first search failed; falling back to Drive-wide search:',e.message);}
+  var folderMatch=_gBestCandidate(subject,folderCandidates);
+  console.log('[Drive] Folder-first candidates:',folderCandidates.length,'best score:',folderMatch.score.toFixed(3));
+  if(folderMatch.file&&folderMatch.score>=0.28)return folderMatch.file;
 
-// ── One-time folder reachability check ──
-var _gFolderChecked=false;
-async function _gCheckFolder(){
-  if(_gFolderChecked)return;
-  _gFolderChecked=true;
-  // Probe: list immediate children (may be subfolders) and any PDFs directly inside
-  var q=encodeURIComponent("'"+GDRIVE_FOLDER_ID+"' in parents and trashed=false");
-  var res=await fetch('https://www.googleapis.com/drive/v3/files?q='+q+'&fields=files(id,name,mimeType)&pageSize=10&supportsAllDrives=true&includeItemsFromAllDrives=true',{headers:{'Authorization':'Bearer '+_gTok}});
-  var d=await res.json();
-  console.log('[Drive] Folder children (',res.status,'):');
-  (d.files||[]).forEach(function(f,i){console.log('  ['+i+']',f.mimeType==='application/vnd.google-apps.folder'?'[FOLDER]':'[FILE]',f.name);});
-  if(d.error)console.error('[Drive] Probe error:',d.error);
+  var globalCandidates=await _gFetchCandidates(subject,null),all=new Map();
+  folderCandidates.concat(globalCandidates).forEach(function(f){if(!all.has(f.id))all.set(f.id,f);});
+  var best=_gBestCandidate(subject,Array.from(all.values()));
+  console.log('[Drive] Drive-wide fallback candidates:',globalCandidates.length,'best score:',best.score.toFixed(3));
+  return best.file&&best.score>=0.08?best.file:null;
 }
 
 // ── Find best matching PDF ──
 async function _gsearch(subject, fileref){
-  await _gCheckFolder();
-  var candidates=await _gCandidates(subject, fileref);
-  if(!candidates||!candidates.length){
-    console.log('[Drive] No candidates found for:',subject.substring(0,60));
-    return null;
-  }
-  // Compute IDF from the candidate pool — generic terms (in many files) get low weight
-  var gTerms=_gDistinct(subject,12);
-  var cFnames=candidates.map(function(f){return f.name;});
-  var idf=_computeIDF(gTerms,cFnames);
-  var best=null,bestScore=0,THRESHOLD=0.08;
-  candidates.forEach(function(f){
-    var s=_gScore(subject,f.name,idf);
-    if(s>bestScore){bestScore=s;best=f;}
-  });
-  console.log('[Drive] Candidates:',candidates.length,' Best:',best?best.name:'none',' Score:',bestScore.toFixed(3));
-  return bestScore>=THRESHOLD?best:null;
+  return _gFolderFirstSearch(subject);
 }
 
 // ── UI orchestration ──
