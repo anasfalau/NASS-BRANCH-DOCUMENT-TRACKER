@@ -2,6 +2,9 @@
 (function () {
   'use strict';
 
+  // Keep document AI chat disabled until API funding is available. The Edge Function
+  // has its own server-side gate so a direct request cannot bypass this UI switch.
+  var AI_CHAT_ENABLED = false;
   var EDGE_URL = 'https://sblqmpmawkogbbzzkwxt.supabase.co/functions/v1/chat';
   var current = null;
   var loadSeq = 0;
@@ -19,6 +22,15 @@
     if (!form || !input || !consent || !status) return;
     consent.checked = false;
     consent.disabled = true;
+    if (!AI_CHAT_ENABLED) {
+      setStatus(seq, 'Temporarily paused');
+      setWelcome('Document AI chat is turned off while API credits are unavailable. No document text will be sent to an AI service.');
+      input.disabled = true;
+      input.placeholder = 'Document AI chat is temporarily paused';
+      var sendButton = document.getElementById('ds-chat-send');
+      if (sendButton) sendButton.disabled = true;
+      return;
+    }
     form.onsubmit = function (event) { event.preventDefault(); send(); };
     input.onkeydown = function (event) {
       if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); send(); }
