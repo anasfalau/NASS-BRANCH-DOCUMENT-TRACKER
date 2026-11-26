@@ -5,6 +5,110 @@ const SUPABASE_URL      = 'https://sblqmpmawkogbbzzkwxt.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNibHFtcG1hd2tvZ2Jienprd3h0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4MDQwMTYsImV4cCI6MjA5MTM4MDAxNn0.U5Fgn2HZ7nYizr81P2Ba2j-EEmG2MTq3zFT79d--GcM';
 
 const CONFIG_KEYS = ['nassOfficers', 'nassStatuses', 'nassLocations', 'nassActions', 'nassFileIndex'];
+var GDRIVE_CLIENT_ID = '1073280029907-0166ddlukbg2mg6mprp6hlk34l9fsj5a.apps.googleusercontent.com';
+var GDRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
+var _gTok = null, _gTokExpiresAt = 0, _gCC = null, _gTokenQueue = [], _gRefreshInFlight = false;
+
+async function _gDriveAuthCall(action, code) {
+  if (!window._sb) throw new Error('Tracker session is not ready.');
+  const { data, error } = await window._sb.functions.invoke('gdrive-auth', {
+    body: { action: action, code: code || undefined },
+    headers: { 'X-Requested-With': 'XmlHttpRequest' }
+  });
+  if (error) {
+    let message = error.message || 'Google Drive authorization failed.';
+    try {
+      const detail = await error.context.clone().json();
+      if (detail.error) message = detail.error;
+    } catch (_) {}
+    throw new Error(message);
+  }
+  return data || {};
+}
+
+function _gApplyAccess(data) {
+  if (!data || !data.access_token) throw new Error('Google Drive did not return a usable access token.');
+  _gTok = data.access_token;
+  _gTokExpiresAt = Date.now() + Math.max(60, Number(data.expires_in) || 3600) * 1000;
+  const modal = document.getElementById('gdrive-auth-modal');
+  if (modal) modal.style.display = 'none';
+  _gDrainTokenQueue();
+}
+
+function _gDrainTokenQueue() {
+  const queued = _gTokenQueue.splice(0);
+  queued.forEach(function (callback) {
+    try { Promise.resolve(callback()).catch(function (error) { console.error('[Drive] Request failed:', error); }); }
+    catch (error) { console.error('[Drive] Request failed:', error); }
+  });
+}
+
+function _gShowAuthModal(message) {
+  const modal = document.getElementById('gdrive-auth-modal');
+  const status = document.getElementById('gdrive-auth-status');
+  if (status && message) status.textContent = message;
+  if (modal) modal.style.display = 'flex';
+}
+
+function _gclient() {
+  if (_gCC) return _gCC;
+  const oauth = window.google && window.google.accounts && window.google.accounts.oauth2;
+  if (!oauth) return null;
+  _gCC = oauth.initCodeClient({
+    client_id: GDRIVE_CLIENT_ID,
+    scope: GDRIVE_SCOPE,
+    ux_mode: 'popup',
+    include_granted_scopes: true,
+    callback: async function (response) {
+      if (!response || !response.code) {
+        _gShowAuthModal(response && response.error_description || 'Google Drive authorization was not completed.');
+        return;
+      }
+      try {
+        const result = await _gDriveAuthCall('exchange', response.code);
+        _gApplyAccess(result);
+      } catch (error) {
+        _gShowAuthModal(error.message || 'Could not connect Google Drive. Please try again.');
+      }
+    },
+    error_callback: function (error) {
+      _gShowAuthModal(error && error.type === 'popup_failed_to_open'
+        ? 'Allow pop-ups for this tracker, then try connecting again.'
+        : 'Google authorization was closed before it finished. Try again when ready.');
+    }
+  });
+  return _gCC;
+}
+
+function _gwithToken(callback) {
+  if (_gTok && _gTokExpiresAt > Date.now() + 60000) { callback(); return; }
+  if (typeof callback === 'function') _gTokenQueue.push(callback);
+  if (_gRefreshInFlight) return;
+  _gRefreshInFlight = true;
+  _gDriveAuthCall('refresh').then(_gApplyAccess).catch(function (error) {
+    _gShowAuthModal(error.message || 'Reconnect Google Drive to continue.');
+  }).finally(function () { _gRefreshInFlight = false; });
+}
+
+function initGoogleDriveSession() {
+  const button = document.getElementById('gdrive-auth-btn');
+  if (button) button.onclick = function () {
+    const client = _gclient();
+    if (!client) {
+      _gShowAuthModal('Google sign-in is still loading. Please try again in a moment.');
+      return;
+    }
+    client.requestCode();
+  };
+
+  // Access tokens live only in memory. The server keeps the refresh token for
+  // this tracker user and returns fresh access tokens until tracker logout.
+  localStorage.removeItem('nass_gdrive_token');
+  localStorage.removeItem('nass_gdrive_expiry');
+  _gDriveAuthCall('refresh').then(_gApplyAccess).catch(function (error) {
+    _gShowAuthModal(error.message || 'Connect Google Drive to search documents.');
+  });
+}
 
 // Parallel array to `rows` — stores the Supabase UUID for each record.
 var rowIds = [];
@@ -75,26 +179,7 @@ var rowIds = [];
   if (typeof applyRolePermissions === 'function') applyRolePermissions();
   if (typeof _mlSubscribeRealtime === 'function') _mlSubscribeRealtime(sb);
 
-  // Show the Google Drive connect modal right after login.
-  // The button click is the user gesture required to open the OAuth popup
-  // without browsers blocking it as an unsolicited pop-up.
-  // GIS is async-deferred so we poll until window.google is ready (max 6s).
-  (function _gEarlyAuth(attempts) {
-    if (typeof _gclient === 'function' && _gclient()) {
-      var modal = document.getElementById('gdrive-auth-modal');
-      var btn   = document.getElementById('gdrive-auth-btn');
-      if (modal && btn) {
-        modal.style.display = 'flex';
-        btn.onclick = function() {
-          modal.style.display = 'none';
-          var tc = _gclient();
-          if (tc) tc.requestAccessToken({ prompt: '' });
-        };
-      }
-      return;
-    }
-    if (attempts < 30) setTimeout(function() { _gEarlyAuth(attempts + 1); }, 200);
-  })(0);
+  initGoogleDriveSession();
 
   // Sync rowIds with current rows
   rowIds = JSON.parse(localStorage.getItem('nassRowIds') || '[]');
@@ -163,13 +248,6 @@ var rowIds = [];
       console.warn('[NASS] Broadcast send failed:', e);
     }
   };
-
-  // ── Google Drive token persistence ───────────────────────────
-  // GIS Token Client stores the access token only in the memory var _gTok.
-  // On every page refresh _gTok is undefined → Google prompts for login again.
-  // Fix: restore _gTok from localStorage on load, and intercept its setter
-  // so every new token is automatically saved (tokens last ~1 hour).
-  initGoogleTokenPersistence();
 
   // Re-sync when the user returns to this browser tab (throttled to 30 s)
   let _lastVisibilityPull = 0;
@@ -553,36 +631,6 @@ async function pullDelta(sb, ids, deleted) {
   localStorage.setItem('nassRowIds', JSON.stringify(rowIds));
 }
 
-// ── Google Drive token persistence ─────────────────────────────
-function initGoogleTokenPersistence() {
-  const TOKEN_KEY  = 'nass_gdrive_token';
-  const EXPIRY_KEY = 'nass_gdrive_expiry';
-
-  // Restore a still-valid token so _gwithToken skips the OAuth prompt
-  const stored = localStorage.getItem(TOKEN_KEY);
-  const expiry = parseInt(localStorage.getItem(EXPIRY_KEY) || '0', 10);
-  if (stored && expiry > Date.now() + 60000) {
-    window._gTok = stored;
-    console.log('[Drive] Token restored — valid for ~' +
-      Math.round((expiry - Date.now()) / 60000) + ' min');
-  }
-
-  // Poll every 3 s: when app.js receives a new GIS token (_gTok changes),
-  // save it to localStorage immediately.
-  // Polling is used instead of Object.defineProperty because var-declared
-  // globals are non-configurable and defineProperty would throw a TypeError.
-  let lastSeen = window._gTok || null;
-  setInterval(function () {
-    const current = window._gTok;
-    if (current && current !== lastSeen) {
-      lastSeen = current;
-      localStorage.setItem(TOKEN_KEY,  current);
-      localStorage.setItem(EXPIRY_KEY, (Date.now() + 55 * 60 * 1000).toString());
-      console.log('[Drive] New token saved to storage');
-    }
-  }, 30000); // 30 s — tokens only change on OAuth prompt, no need to check faster
-}
-
 // ── Force-password-change modal ─────────────────────────────────
 function showChangePasswordModal(sb) {
   const modal = document.getElementById('nass-pwchange');
@@ -661,11 +709,14 @@ function bindLoginForm(sb) {
     });
 }
 
-function nassLogout() {
-  // Clear Google Drive token so the next user has to authenticate freshly
+async function nassLogout() {
+  // End the persisted Google Drive refresh session before signing out of NASS.
+  try { await _gDriveAuthCall('logout'); }
+  catch (error) { console.warn('[Drive] Could not clear the stored Drive session:', error); }
   localStorage.removeItem('nass_gdrive_token');
   localStorage.removeItem('nass_gdrive_expiry');
   window._gTok = null;
+  _gTokExpiresAt = 0;
   window._sb.auth.signOut().then(() => window.location.reload());
 }
 

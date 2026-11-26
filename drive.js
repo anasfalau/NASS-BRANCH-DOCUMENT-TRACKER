@@ -289,30 +289,8 @@ function _dsFmtSize(b){if(b<1024)return b+'B';if(b<1048576)return Math.round(b/1
 function dsPreview(id,name,link){_dsOpenPreview(id,name,'application/pdf',link||'');}
 
 // ── Google Drive PDF Integration ──────────────────────────────
-var GDRIVE_CLIENT_ID='1073280029907-0166ddlukbg2mg6mprp6hlk34l9fsj5a.apps.googleusercontent.com';
 var GDRIVE_FOLDER_ID='1_kCMWABUCIVR43uL0CCvATXn3Iog-5mP'; // outgoing folder
 var GDRIVE_INCOMING_FOLDER_ID=window.NASS_DRIVE_INCOMING_FOLDER_ID||'1CvD1Ludf3u0KH-hONKITSD9KYrw5SrN1';
-var _gTok=null,_gTC=null,_gTCb=null;
-
-// ── Token client ──
-function _gclient(){
-  if(_gTC)return _gTC;
-  if(!window.google||!window.google.accounts)return null;
-  _gTC=google.accounts.oauth2.initTokenClient({
-    client_id:GDRIVE_CLIENT_ID,
-    scope:'https://www.googleapis.com/auth/drive.readonly',
-    prompt:'',
-    callback:function(r){if(r.access_token){_gTok=r.access_token;if(_gTCb){var c=_gTCb;_gTCb=null;c();}}}
-  });
-  return _gTC;
-}
-function _gwithToken(cb){
-  if(_gTok){cb();return;}
-  var tc=_gclient();
-  if(!tc){console.warn('[Drive] GIS not ready');return;}
-  _gTCb=cb;
-  tc.requestAccessToken({prompt:''});
-}
 
 // ── Stop words to ignore when picking search terms ──
 var _gStop=new Set(['that','this','with','from','have','will','been','were','they','their','which','when','what','where','also','more','into','some','than','then','there','these','those','after','about','other','your','each','such','over','both','during','before','between','should','could','would','shall','must','being','having','making','taking','request','order','ensure','conduct','first','second','third','within','under','above','following','regard','subject','letter','dated','naval','headquarters','branch','navy','nigerian','officer','command','approval','international','assessment','assessments','establishment','establishments','infrastructure','environmental','management','conference','compliance','standardisation','production','presentation','inspection','invitation','attend','place','work','safety','report','executive','evaluation','annual','facilities','office','purchase','senior','retired','exercise','general','quarter','systems','standard','standards','equipment','items','funds','review','summary','activities','information','operations','random','hazards','joint','video','audit','ships','minute','action','forward','herewith','attached','copy','copies','reference','attention','necessary','required','submit','submitted','provide','provided','note','noted','seen','date','please','kindly','urgent','immediate','memo','signal','flag','issue','issued','direct','directed','follow','upon','into','back','down','from','been','done','made','take','came','come','went','went','come','goes','going','give','given','keep','kept','hold','held','show','shown','find','found','know','known','said','says','said','well','very','just','only','also','much','many','most','more','less','same','like','used','uses','need','needed','using','used',]);

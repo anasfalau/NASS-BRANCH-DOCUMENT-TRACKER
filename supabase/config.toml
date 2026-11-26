@@ -33,3 +33,6 @@ enable_signup = true
 
 [functions.chat]
 verify_jwt = true
+
+[functions.gdrive-auth]
+verify_jwt = true

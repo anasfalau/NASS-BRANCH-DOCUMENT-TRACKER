@@ -115,7 +115,7 @@ if ('serviceWorker' in navigator) {
     <div style="font-size:17px;font-weight:700;color:#1a2332;margin-bottom:8px">Connect Google Drive</div>
     <div style="font-size:13px;color:#5a6375;line-height:1.6;margin-bottom:28px">
       NASS Branch uses Google Drive to display and search scanned documents.<br>
-      Grant read-only access to continue.
+      Grant read-only access once. Drive stays connected until you sign out of the tracker.
     </div>
     <button id="gdrive-auth-btn"
       style="width:100%;padding:11px;background:#003366;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;letter-spacing:0.03em;margin-bottom:10px;transition:background 0.15s"
@@ -127,7 +127,7 @@ if ('serviceWorker' in navigator) {
       onmouseover="this.style.background='#f4f6fa'" onmouseout="this.style.background='none'">
       Skip for now
     </button>
-    <div style="margin-top:14px;font-size:10.5px;color:#b0b8c4">Read-only access · No files are modified</div>
+    <div id="gdrive-auth-status" style="margin-top:14px;font-size:10.5px;color:#b0b8c4">Read-only access · No files are modified</div>
   </div>
 </div>
 <!-- ── Force Password Change Modal ───────────────────────────── -->
