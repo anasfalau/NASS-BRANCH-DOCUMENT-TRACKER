@@ -6,8 +6,8 @@
 //    • Offline fallback → serve cached index.html + post message
 // ================================================================
 
-const CACHE   = 'nass-tracker-v28';
-const OFFLINE = 'nass-offline-v28';
+const CACHE   = 'nass-tracker-v29';
+const OFFLINE = 'nass-offline-v29';
 
 const APP_SHELL = [
   './',
@@ -17,7 +17,6 @@ const APP_SHELL = [
   './utils.js',
   './tracker.js',
   './drive.js',
-  './drive-chat.js',
   './dashboard.js',
   './admin.js',
   './inbox.js',
